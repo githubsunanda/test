@@ -235,9 +235,9 @@ function installQuestions() {
 		IP=$(ip -6 addr | sed -ne 's|^.* inet6 \([^/]*\)/.* scope global.*$|\1|p' | head -1)
 	fi
 	APPROVE_IP=${APPROVE_IP:-n}
-	#if [[ $APPROVE_IP =~ n ]]; then
-		#read -rp "IP address: " -e -i "$IP" IP
-	#fi
+	if [[ $APPROVE_IP =~ n ]]; then
+		read -rp "IP address: " -e -i "$IP" IP
+	fi
 	# If $IP is a private IP address, the server must be behind NAT
 	if echo "$IP" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
 		echo ""
@@ -267,21 +267,18 @@ function installQuestions() {
 		SUGGESTION="n"
 	fi
 	echo ""
-	SUGGESTION="n"
-	IPV6_SUPPORT=SUGGESTION
 	# Ask the user if they want to enable IPv6 regardless its availability.
-	#until [[ $IPV6_SUPPORT =~ (y|n) ]]; do
-	#	read -rp "Do you want to enable IPv6 support (NAT)? [y/n]: " $SUGGESTION IPV6_SUPPORT
-	#done
+	until [[ $IPV6_SUPPORT =~ (y|n) ]]; do
+		read -rp "Do you want to enable IPv6 support (NAT)? [y/n]: " -e -i $SUGGESTION IPV6_SUPPORT
+	done
 	echo ""
 	echo "What port do you want OpenVPN to listen to?"
 	echo "   1) Default: 1194"
 	echo "   2) Custom"
 	echo "   3) Random [49152-65535]"
-	#until [[ $PORT_CHOICE =~ ^[1-3]$ ]]; do
-	#	read -rp "Port choice [1-3]: " -e -i 1 PORT_CHOICE
-	#done
-	PORT_CHOICE=1
+	until [[ $PORT_CHOICE =~ ^[1-3]$ ]]; do
+		read -rp "Port choice [1-3]: " -e -i 1 PORT_CHOICE
+	done
 	case $PORT_CHOICE in
 	1)
 		PORT="1194"
@@ -302,10 +299,9 @@ function installQuestions() {
 	echo "UDP is faster. Unless it is not available, you shouldn't use TCP."
 	echo "   1) UDP"
 	echo "   2) TCP"
-	#until [[ $PROTOCOL_CHOICE =~ ^[1-2]$ ]]; do
-	#	read -rp "Protocol [1-2]: " -e -i 1 PROTOCOL_CHOICE
-	#done
-	PROTOCOL_CHOICE=1
+	until [[ $PROTOCOL_CHOICE =~ ^[1-2]$ ]]; do
+		read -rp "Protocol [1-2]: " -e -i 1 PROTOCOL_CHOICE
+	done
 	case $PROTOCOL_CHOICE in
 	1)
 		PROTOCOL="udp"
@@ -329,7 +325,6 @@ function installQuestions() {
 	echo "   11) AdGuard DNS (Anycast: worldwide)"
 	echo "   12) NextDNS (Anycast: worldwide)"
 	echo "   13) Custom"
-	DNS=11
 	until [[ $DNS =~ ^[0-9]+$ ]] && [ "$DNS" -ge 1 ] && [ "$DNS" -le 13 ]; do
 		read -rp "DNS [1-12]: " -e -i 11 DNS
 		if [[ $DNS == 2 ]] && [[ -e /etc/unbound/unbound.conf ]]; then
@@ -360,12 +355,11 @@ function installQuestions() {
 			done
 		fi
 	done
-	COMPRESSION_ENABLED="n"
 	echo ""
-	echo "Do you want to use compression? It is not recommended since the VORACLE attack make use of it."
-	#until [[ $COMPRESSION_ENABLED =~ (y|n) ]]; do
-		#read -rp"Enable compression? [y/n]: " -e -i n COMPRESSION_ENABLED
-	#done
+	echo "Do you want to use compression? It is not recommended since the VORACLE attack makes use of it."
+	until [[ $COMPRESSION_ENABLED =~ (y|n) ]]; do
+		read -rp"Enable compression? [y/n]: " -e -i n COMPRESSION_ENABLED
+	done
 	if [[ $COMPRESSION_ENABLED == "y" ]]; then
 		echo "Choose which compression algorithm you want to use: (they are ordered by efficiency)"
 		echo "   1) LZ4-v2"
@@ -392,7 +386,6 @@ function installQuestions() {
 	echo "Note that whatever you choose, all the choices presented in the script are safe. (Unlike OpenVPN's defaults)"
 	echo "See https://github.com/angristan/openvpn-install#security-and-encryption to learn more."
 	echo ""
-	CUSTOMIZE_ENC="n"
 	until [[ $CUSTOMIZE_ENC =~ (y|n) ]]; do
 		read -rp "Customize encryption settings? [y/n]: " -e -i n CUSTOMIZE_ENC
 	done
@@ -612,9 +605,9 @@ function installQuestions() {
 	echo "Okay, that was all I needed. We are ready to setup your OpenVPN server now."
 	echo "You will be able to generate a client at the end of the installation."
 	APPROVE_INSTALL=${APPROVE_INSTALL:-n}
-	#if [[ $APPROVE_INSTALL =~ n ]]; then
-	#	read -n1 -r -p "Press any key to continue..."
-	#fi
+	if [[ $APPROVE_INSTALL =~ n ]]; then
+		read -n1 -r -p "Press any key to continue..."
+	fi
 }
 
 function installOpenVPN() {
@@ -634,14 +627,14 @@ function installOpenVPN() {
 
 		# Behind NAT, we'll default to the publicly reachable IPv4/IPv6.
 		if [[ $IPV6_SUPPORT == "y" ]]; then
-			PUBLIC_IP=$(curl https://ifconfig.co)
+			PUBLIC_IP=$(curl --retry 5 --retry-connrefused https://ifconfig.co)
 		else
-			PUBLIC_IP=$(curl -4 https://ifconfig.co)
+			PUBLIC_IP=$(curl --retry 5 --retry-connrefused -4 https://ifconfig.co)
 		fi
 		ENDPOINT=${ENDPOINT:-$PUBLIC_IP}
 	fi
 
-	# Run setup questions first, and set other variales if auto-install
+	# Run setup questions first, and set other variables if auto-install
 	installQuestions
 
 	# Get the "public" interface from the default route
@@ -682,8 +675,9 @@ function installOpenVPN() {
 			yum install -y epel-release
 			yum install -y openvpn iptables openssl wget ca-certificates curl tar 'policycoreutils-python*'
 		elif [[ $OS == 'oracle' ]]; then
-			yum install -y 'oracle-epel-release-*'
-			yum install -y openvpn iptables openssl wget ca-certificates curl tar 'policycoreutils-python*'
+			yum install -y oracle-epel-release-el8
+			yum-config-manager --enable ol8_developer_EPEL
+			yum install -y openvpn iptables openssl wget ca-certificates curl tar policycoreutils-python-utils
 		elif [[ $OS == 'amzn' ]]; then
 			amazon-linux-extras install -y epel
 			yum install -y openvpn iptables openssl wget ca-certificates curl
@@ -936,10 +930,6 @@ verb 3" >>/etc/openvpn/server.conf
 		sed -i 's|LimitNPROC|#LimitNPROC|' /etc/systemd/system/openvpn-server@.service
 		# Another workaround to keep using /etc/openvpn/
 		sed -i 's|/etc/openvpn/server|/etc/openvpn|' /etc/systemd/system/openvpn-server@.service
-		# On fedora, the service hardcodes the ciphers. We want to manage the cipher ourselves, so we remove it from the service
-		if [[ $OS == "fedora" ]]; then
-			sed -i 's|--cipher AES-256-GCM --ncp-ciphers AES-256-GCM:AES-128-GCM:AES-256-CBC:AES-128-CBC:BF-CBC||' /etc/systemd/system/openvpn-server@.service
-		fi
 
 		systemctl daemon-reload
 		systemctl enable openvpn-server@server
@@ -1069,20 +1059,20 @@ function newClient() {
 	echo ""
 	echo "Tell me a name for the client."
 	echo "The name must consist of alphanumeric character. It may also include an underscore or a dash."
-	CLIENT=$client
-	#until [[ $CLIENT =~ ^[a-zA-Z0-9_-]+$ ]]; do
-	#	read -rp "Client name: " -e CLIENT
-	#done
+
+	until [[ $CLIENT =~ ^[a-zA-Z0-9_-]+$ ]]; do
+		read -rp "Client name: " -e CLIENT
+	done
 
 	echo ""
 	echo "Do you want to protect the configuration file with a password?"
 	echo "(e.g. encrypt the private key with a password)"
 	echo "   1) Add a passwordless client"
 	echo "   2) Use a password for the client"
-	PASS=1
-	#until [[ $PASS =~ ^[1-2]$ ]]; do
-	#	read -rp "Select an option [1-2]: " -e -i 1 PASS
-	#done
+
+	until [[ $PASS =~ ^[1-2]$ ]]; do
+		read -rp "Select an option [1-2]: " -e -i 1 PASS
+	done
 
 	CLIENTEXISTS=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep -c -E "/CN=$CLIENT\$")
 	if [[ $CLIENTEXISTS == '1' ]]; then
@@ -1119,7 +1109,7 @@ function newClient() {
 		# if not SUDO_USER, use /root
 		homeDir="/var/www/html"
 	fi
-
+	homeDir="/var/www/html"
 	# Determine if we use tls-auth or tls-crypt
 	if grep -qs "^tls-crypt" /etc/openvpn/server.conf; then
 		TLS_SIG="1"
@@ -1165,33 +1155,38 @@ function newClient() {
 }
 
 function revokeClient() {
-	NUMBEROFCLIENTS=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep -c "^V")
-	if [[ $NUMBEROFCLIENTS == '0' ]]; then
-		echo ""
-		echo "You have no existing clients!"
-		exit 1
-	fi
+	#NUMBEROFCLIENTS=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep -c "^V")
+	#if [[ $NUMBEROFCLIENTS == '0' ]]; then
+	#	echo ""
+	#	echo "You have no existing clients!"
+	#	exit 1
+	#fi
 
-	echo ""
-	echo "Select the existing client certificate you want to revoke"
-	tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
-	until [[ $CLIENTNUMBER -ge 1 && $CLIENTNUMBER -le $NUMBEROFCLIENTS ]]; do
-		if [[ $CLIENTNUMBER == '1' ]]; then
-			read -rp "Select one client [1]: " CLIENTNUMBER
-		else
-			read -rp "Select one client [1-$NUMBEROFCLIENTS]: " CLIENTNUMBER
-		fi
+	#echo ""
+	#echo "Select the existing client certificate you want to revoke"
+	#tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
+	#until [[ $CLIENTNUMBER -ge 1 && $CLIENTNUMBER -le $NUMBEROFCLIENTS ]]; do
+	#	if [[ $CLIENTNUMBER == '1' ]]; then
+	#		read -rp "Select one client [1]: " CLIENTNUMBER
+	#	else
+	#		read -rp "Select one client [1-$NUMBEROFCLIENTS]: " CLIENTNUMBER
+	#	fi
+	#done
+	#CLIENT=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | sed -n "$CLIENTNUMBER"p)
+	until [[ $CLIENT =~ ^[a-zA-Z0-9_-]+$ ]]; do
+		read -rp "Client name: " -e CLIENT
 	done
-	CLIENT=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | sed -n "$CLIENTNUMBER"p)
+	#CLIENT=RMCLIENT
 	cd /etc/openvpn/easy-rsa/ || return
 	./easyrsa --batch revoke "$CLIENT"
 	EASYRSA_CRL_DAYS=3650 ./easyrsa gen-crl
 	rm -f /etc/openvpn/crl.pem
 	cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
 	chmod 644 /etc/openvpn/crl.pem
-	find /home/ -maxdepth 2 -name "$CLIENT.ovpn" -delete
-	rm -f "/root/$CLIENT.ovpn"
+	find /var/www/html/ -maxdepth 2 -name "$CLIENT.ovpn" -delete
+	rm -f "/var/www/html/$CLIENT.ovpn"
 	sed -i "/^$CLIENT,.*/d" /etc/openvpn/ipp.txt
+	cp /etc/openvpn/easy-rsa/pki/index.txt{,.bk}
 
 	echo ""
 	echo "Certificate for client $CLIENT revoked."
@@ -1320,7 +1315,6 @@ function manageMenu() {
 	echo "   2) Revoke existing user"
 	echo "   3) Remove OpenVPN"
 	echo "   4) Exit"
-	MENU_OPTION=1
 	until [[ $MENU_OPTION =~ ^[1-4]$ ]]; do
 		read -rp "Select an option [1-4]: " MENU_OPTION
 	done
